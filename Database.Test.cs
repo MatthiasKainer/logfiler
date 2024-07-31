@@ -17,7 +17,7 @@ public class DatabaseTest
 
         // Act
         await db.PrepareFor(dynamicObject);
-        await db.StoreInDatabase(dynamicObject);
+        await db.StoreInDatabase([dynamicObject]);
 
         // Assert
         var table = await db.Get();

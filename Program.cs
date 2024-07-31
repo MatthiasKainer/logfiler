@@ -53,7 +53,7 @@ internal class Program
 
             currentCount++;
         }
-
+        await channel.Writer.WriteAsync(entries);
         channel.Writer.Complete();
         await writerTask;
         
