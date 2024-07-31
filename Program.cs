@@ -23,18 +23,21 @@ internal class Program
         var reader = new Reader().ProcessFile;
         await using var database = new Database($"{file}.db");
         
-        var channel = Channel.CreateUnbounded<ExpandoObject>();
+        var channel = Channel.CreateUnbounded<List<ExpandoObject>>();
         var writerTask = WriteToDatabaseAsync(channel.Reader, database);
 
         var currentCount = 0;
-        var counterSteps = 100000;
+        const int counterSteps = 100000;
         var timestamp = DateTime.Now;
+        List<ExpandoObject> entries = new();
         await foreach (var line in reader(file))
         {
             if (currentCount % counterSteps == 0)
             {
                 var timePerLine = (DateTime.Now - timestamp).TotalMilliseconds / counterSteps;
                 if (!silent) Console.WriteLine($"Processed {currentCount} lines - Time per line: {timePerLine} ms");
+                await channel.Writer.WriteAsync(entries);
+                entries = [];
                 timestamp = DateTime.Now;
             }
 
@@ -45,7 +48,7 @@ internal class Program
                     await database.PrepareFor(entry);
                 }
 
-                await channel.Writer.WriteAsync(entry);
+                entries.Add(entry);
             }
 
             currentCount++;
@@ -61,7 +64,7 @@ internal class Program
     }
     
     
-    private static async Task WriteToDatabaseAsync(ChannelReader<ExpandoObject> reader, Database database)
+    private static async Task WriteToDatabaseAsync(ChannelReader<List<ExpandoObject>> reader, Database database)
     {
         await foreach (var entry in reader.ReadAllAsync())
         {

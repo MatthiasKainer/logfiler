@@ -7,6 +7,8 @@ namespace logfiler;
 public class Database: IAsyncDisposable
 {
     private readonly SQLiteConnection _connection;
+    private SQLiteCommand _command;
+    private Dictionary<string, SQLiteParameter> _parameters = new();
 
     public Database(string filename = "somethingsomething.db", bool overwrite = true)
     {
@@ -19,9 +21,13 @@ public class Database: IAsyncDisposable
         {
             DataSource = filename,
             Version = 3,
-            ForeignKeys = true
-        }.ConnectionString;
-        _connection = new SQLiteConnection(connectionString, true);
+            ForeignKeys = true,
+            JournalMode = SQLiteJournalModeEnum.Off,
+            SyncMode = SynchronizationModes.Normal,
+        };
+        connectionString.Add("cache", "shared"); 
+        connectionString.Add("journal_size_limit", "6144000"); 
+        _connection = new SQLiteConnection(connectionString.ConnectionString, true);
         _connection.Open();
     }
     
@@ -40,21 +46,37 @@ public class Database: IAsyncDisposable
         await using var createTable = new SQLiteCommand(_connection);
         var columnsTypes = string.Join(", ", entry.Select(kvp => $"{kvp.Key} {TypeFromValue(kvp.Value)}"));
         createTable.CommandText = $"CREATE TABLE IF NOT EXISTS log_entries ({columnsTypes})";
-        createTable.ExecuteNonQuery();
-    }
-
-    public async Task StoreInDatabase(ExpandoObject entry)
-    {
-        await using var command = new SQLiteCommand(_connection);
+        
+        await createTable.ExecuteNonQueryAsync();
+        
+        _command = new SQLiteCommand(_connection);
         var columns = string.Join(", ", entry.Select(kvp => kvp.Key));
         var values = string.Join(", ", entry.Select(kvp => $"@{kvp.Key}"));
-        command.CommandText = $"INSERT INTO log_entries ({columns}) VALUES ({values})";
-        foreach (var keyValue in entry)
-        {
-            command.Parameters.AddWithValue($"@{keyValue.Key}", keyValue.Value);
-        }
+        _command.CommandText = $"INSERT INTO log_entries ({columns}) VALUES ({values})";
 
-        command.ExecuteNonQuery();
+        _parameters = new Dictionary<string, SQLiteParameter>();
+        foreach (var keyValue in entry)
+        {   
+            var param = _command.CreateParameter();
+            param.ParameterName = $"@{keyValue.Key}";
+            _command.Parameters.Add(param);
+            _parameters.Add(keyValue.Key, param);
+        }
+    }
+
+    public async Task StoreInDatabase(List<ExpandoObject> entry)
+    {
+        await using var transaction = _connection.BeginTransaction();
+        foreach (var obj in entry)
+        {
+            foreach (var keyValue in obj)
+            {
+                _parameters[keyValue.Key].Value = keyValue.Value;
+            }
+            _command.ExecuteNonQuery();
+        }
+        
+        await transaction.CommitAsync();
     }
 
 
