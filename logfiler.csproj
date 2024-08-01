@@ -31,6 +31,9 @@
       <Compile Update="Transform.Test.cs">
         <DependentUpon>Transform.cs</DependentUpon>
       </Compile>
+      <Compile Update="ArgumentParser.Test.cs">
+        <DependentUpon>ArgumentParser.cs</DependentUpon>
+      </Compile>
     </ItemGroup>
 
 </Project>

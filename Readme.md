@@ -5,11 +5,13 @@ A very simple library that reads a log file and stores it in a sqlite database
 ## Usage
 
 ```sh
-logfiler <file> <pattern> [--silent] [--peek]
+logfiler --file|-f <file> --pattern|-p <pattern> [--silent|-s true|false] [ --commit-size|-c int]
 ```
 
 * file: path to the log file, also the base name of the sqlite database. Any existing database with the same name will be replaced.
 * pattern: pattern to parse the log file, for example {timestamp:date:MM/dd/yyyy} {level:graphql-level} {source} {message}
+* --silent|-s: Silent mode (no step reporting) (optional)
+* --commit-size|-c: Number of entries to commit to the database at once (optional)
 
 ## Pattern Format
 
