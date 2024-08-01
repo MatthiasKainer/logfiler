@@ -7,6 +7,19 @@ namespace logfiler;
 public class DatabaseTest
 {
     [Fact]
+    public async Task NonPreparedStatement_Fails()
+    {
+        dynamic dynamicObject = new ExpandoObject();
+        dynamicObject.hello = "world";
+        dynamicObject.number = 42;
+        await using var db = new Database(Path.GetTempFileName());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await db.StoreInDatabase([dynamicObject])
+        );
+    }
+    
+    [Fact]
     public async Task SaveDynamicObject_Works()
     {
         // Arrange

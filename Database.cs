@@ -7,7 +7,7 @@ namespace logfiler;
 public class Database: IAsyncDisposable
 {
     private readonly SQLiteConnection _connection;
-    private SQLiteCommand _command;
+    private SQLiteCommand? _command;
     private Dictionary<string, SQLiteParameter> _parameters = new();
 
     public Database(string filename = "somethingsomething.db", bool overwrite = true)
@@ -66,6 +66,11 @@ public class Database: IAsyncDisposable
 
     public async Task StoreInDatabase(List<ExpandoObject> entry)
     {
+        if (_command == null)
+        {
+            throw new InvalidOperationException("Command not initialized");
+        }
+        
         await using var transaction = _connection.BeginTransaction();
         foreach (var obj in entry)
         {
