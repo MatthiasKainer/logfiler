@@ -1,24 +1,10 @@
 ﻿using System.Dynamic;
-using logfiler;
 using Xunit;
 
 namespace logfiler;
 
 public class DatabaseTest
 {
-    [Fact]
-    public async Task NonPreparedStatement_Fails()
-    {
-        dynamic dynamicObject = new ExpandoObject();
-        dynamicObject.hello = "world";
-        dynamicObject.number = 42;
-        await using var db = new Database(Path.GetTempFileName());
-
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await db.StoreInDatabase([dynamicObject])
-        );
-    }
-    
     [Fact]
     public async Task SaveDynamicObject_Works()
     {
@@ -29,14 +15,34 @@ public class DatabaseTest
         await using var db = new Database(Path.GetTempFileName());
 
         // Act
-        await db.PrepareFor(dynamicObject);
         await db.StoreInDatabase([dynamicObject]);
 
         // Assert
         var table = await db.Get();
         Assert.Single(table);
-        dynamic firstRow = table.First();
-        Assert.Equal("world", firstRow.hello);
-        Assert.Equal(42, firstRow.number);
+        var firstRow = table.First();
+        Assert.Equal("world", firstRow["hello"]);
+        Assert.Equal(Convert.ToInt64(42), firstRow["number"]);
+    }
+    [Fact]
+    public async Task SaveDictionaryObject_Works()
+    {
+        // Arrange
+        var dictionary = new Dictionary<string, object>
+        {
+            ["hello"] = "world",
+            ["number"] = 42
+        };
+        await using var db = new Database(Path.GetTempFileName());
+
+        // Act
+        await db.StoreInDatabase([dictionary]);
+
+        // Assert
+        var table = await db.Get();
+        Assert.Single(table);
+        var firstRow = table.First();
+        Assert.Equal("world", firstRow["hello"]);
+        Assert.Equal(Convert.ToInt64(42), firstRow["number"]);
     }
 }

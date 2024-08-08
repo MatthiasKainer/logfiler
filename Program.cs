@@ -7,13 +7,25 @@ namespace logfiler;
 public class ProgramArgs
 {
     [ArgumentParser.Argument("f", "file",
-        "path to the log file, also the base name of the sqlite database. Any existing database with the same name will be replaced.",
+        "path to the log file, also the base name of the sqlite database if db not specified. Any existing database with the same name will be replaced.",
         false)]
     public string File { get; set; } = "";
-    [ArgumentParser.Argument("p", "pattern", " pattern to parse the log file, for example {timestamp:date:MM/dd/yyyy} {level:graphql-level} {source} {message}", false)]
+
+    [ArgumentParser.Argument("d", "db",
+        "path to the sqlite database file. Any existing database with the same name will be replaced.",
+        true)]
+    public string? DbFile { get; set; } = null;
+
+    [ArgumentParser.Argument("p", "pattern",
+        " pattern to parse the log file, for example {timestamp:date:MM/dd/yyyy} {level:graphql-level} {source} {message}",
+        false)]
     public string Pattern { get; set; } = "";
+
     [ArgumentParser.Argument("s", "silent", "Silent mode (no step reporting)")]
     public bool Silent { get; set; } = false;
+
+    [ArgumentParser.Argument("v", "verbose", "Far more logs")]
+    public bool Verbose { get; set; } = false;
 
     [ArgumentParser.Argument("c", "commit-size", "Number of entries to commit to the database at once", true)]
     public int CommitSize { get; set; } = 100000;
@@ -28,36 +40,34 @@ internal static class Program
             Help();
             return 1;
         }
-        
+
         var programArgs = args.Parse<ProgramArgs>();
-        var parser = new LogParser(programArgs.Pattern);
-        var transform = new Transform(parser).TransformLogLine;
+        var parser = new LogParser(programArgs.Pattern, programArgs.Verbose);
+        var transform = new Transform(parser, programArgs.Verbose).TransformLogLine;
         var reader = new Reader().ProcessFile;
-        await using var database = new Database($"{programArgs.File}.db");
-        
-        var channel = Channel.CreateUnbounded<List<ExpandoObject>>();
+        var database = new Database(programArgs.DbFile ?? $"{programArgs.File}.db");
+        var channel = Channel.CreateUnbounded<List<IDictionary<string, object>>>();
         var writerTask = WriteToDatabaseAsync(channel.Reader, database);
 
         var currentCount = 0;
+        var addedLines = 0;
         var counterSteps = programArgs.CommitSize;
         var timestamp = DateTime.Now;
-        List<ExpandoObject> entries = new();
+        List<IDictionary<string, object>> entries = new();
         await foreach (var line in reader(programArgs.File))
         {
             if (transform(line) is { } entry)
             {
-                if (currentCount == 0)
-                {
-                    await database.PrepareFor(entry);
-                }
-
                 entries.Add(entry);
+                addedLines++;
             }
-            
+
             if (currentCount != 0 && currentCount % counterSteps == 0)
             {
                 var timePerLine = (DateTime.Now - timestamp).TotalMilliseconds / counterSteps;
-                if (!programArgs.Silent) Console.WriteLine($"Processed {currentCount} lines - Time per line: {timePerLine} ms");
+                if (!programArgs.Silent)
+                    Console.WriteLine(
+                        $"Processed {currentCount} lines, added {addedLines} rows - Time per line: {timePerLine} ms");
                 await channel.Writer.WriteAsync(entries);
                 entries = [];
                 timestamp = DateTime.Now;
@@ -65,24 +75,26 @@ internal static class Program
 
             currentCount++;
         }
+
         await channel.Writer.WriteAsync(entries);
         channel.Writer.Complete();
         await writerTask;
-        
-        Console.WriteLine($"Processed {currentCount} lines");
+
+        Console.WriteLine($"Processed {currentCount} lines, added {addedLines} rows");
         Console.WriteLine("Done");
 
         return 0;
     }
-    
-    private static async Task WriteToDatabaseAsync(ChannelReader<List<ExpandoObject>> reader, Database database)
+
+    private static async Task WriteToDatabaseAsync(ChannelReader<List<IDictionary<string, object>>> reader,
+        Database database)
     {
         await foreach (var entry in reader.ReadAllAsync())
         {
             await database.StoreInDatabase(entry);
         }
     }
-    
+
     private static void Help()
     {
         Console.WriteLine("""
@@ -98,24 +110,25 @@ internal static class Program
         Console.WriteLine();
         // create usage from ProgramArgs
         var properties = typeof(ProgramArgs).GetProperties();
-        
+
         // ensure the attributes are not null
         var attributes = properties
             .Select(p => p.GetCustomAttribute<ArgumentParser.ArgumentAttribute>())
             .NotNull();
 
-        Console.WriteLine($"Usage: logfiler {string.Join(" ", 
-            attributes.Select(p => 
+        Console.WriteLine($"Usage: logfiler {string.Join(" ",
+            attributes.Select(p =>
                 $"{(p.Optional ? "[" : "")}--{p.LongName}|-{p.ShortName} value{(p.Optional ? "]" : "")}"
             ))}");
         Console.WriteLine();
-        
+
         foreach (var prop in properties)
         {
             var attr = prop.GetCustomAttribute<ArgumentParser.ArgumentAttribute>();
             if (attr == null)
                 continue;
-            Console.WriteLine($" --{attr.LongName}|-{attr.ShortName}: {attr.Description} {(attr.Optional ? "(optional)" : "")}");
+            Console.WriteLine(
+                $" --{attr.LongName}|-{attr.ShortName}: {attr.Description} {(attr.Optional ? "(optional)" : "")}");
         }
 
         Console.WriteLine();

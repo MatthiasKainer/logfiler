@@ -6,31 +6,33 @@ namespace logfiler;
 
 public interface ILogParser
 {
-    ExpandoObject? Parse(string logLine);
+    IDictionary<string, object>? Parse(string logLine);
 }
 
-public partial class LogParser: ILogParser
+public partial class LogParser : ILogParser
 {
+    private readonly bool _verbose;
     private readonly Regex _regex;
     private readonly Dictionary<string, Func<string, object>> _groups;
 
-    public LogParser(string pattern)
+    public LogParser(string pattern, bool verbose = false)
     {
+        _verbose = verbose;
         // Convert pattern to regex and extract group names
         (_regex, _groups) = CreateRegexFromPattern(pattern);
     }
 
-    public ExpandoObject? Parse(string logLine)
+    public IDictionary<string, object>? Parse(string logLine)
     {
         var match = _regex.Match(logLine);
         if (!match.Success) return null;
 
-        dynamic dynamicObject = new ExpandoObject();
+        var dynamicObject = new Dictionary<string, object>();
         foreach (var group in _groups)
         {
             ((IDictionary<string, object>)dynamicObject)[group.Key] = group.Value(match.Groups[group.Key].Value);
         }
-        
+
         foreach (var group in _groups)
         {
             if (((IDictionary<string, object?>)dynamicObject)[group.Key] != null) return dynamicObject;
@@ -39,8 +41,9 @@ public partial class LogParser: ILogParser
         return null;
     }
 
-    private static (Regex, Dictionary<string, Func<string, object>>) CreateRegexFromPattern(string pattern)
+    private (Regex, Dictionary<string, Func<string, object>>) CreateRegexFromPattern(string pattern)
     {
+        pattern = pattern.Replace("[", "\\[").Replace("(", "\\(");
         var groups = new Dictionary<string, Func<string, object>>();
         var regexPattern = PregeneratedRegex().Replace(pattern, match =>
         {
@@ -71,9 +74,10 @@ public partial class LogParser: ILogParser
             }
         });
 
-        return (new Regex($"^{regexPattern}$"), groups);
+        if (_verbose) Console.WriteLine($"Generated regex: {regexPattern}");
+        return (new Regex($"^{regexPattern}$", RegexOptions.Compiled), groups);
     }
-    
+
     private static LogLevel ToLogLevel(string level)
     {
         return level.ToUpperInvariant() switch

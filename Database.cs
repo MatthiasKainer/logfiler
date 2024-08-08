@@ -4,7 +4,7 @@ using System.Dynamic;
 
 namespace logfiler;
 
-public class Database: IAsyncDisposable
+public class Database : IAsyncDisposable
 {
     private readonly SQLiteConnection _connection;
     private SQLiteCommand? _command;
@@ -16,7 +16,7 @@ public class Database: IAsyncDisposable
         {
             File.Delete(filename);
         }
-        
+
         var connectionString = new SQLiteConnectionStringBuilder
         {
             DataSource = filename,
@@ -25,12 +25,12 @@ public class Database: IAsyncDisposable
             JournalMode = SQLiteJournalModeEnum.Off,
             SyncMode = SynchronizationModes.Normal,
         };
-        connectionString.Add("cache", "shared"); 
-        connectionString.Add("journal_size_limit", "6144000"); 
+        connectionString.Add("cache", "shared");
+        connectionString.Add("journal_size_limit", "6144000");
         _connection = new SQLiteConnection(connectionString.ConnectionString, true);
         _connection.Open();
     }
-    
+
     private static string TypeFromValue(object? value)
     {
         return value switch
@@ -41,22 +41,24 @@ public class Database: IAsyncDisposable
         };
     }
 
-    public async Task PrepareFor(ExpandoObject entry)
+    private async Task PrepareFor(IDictionary<string, object> entry)
     {
         await using var createTable = new SQLiteCommand(_connection);
-        var columnsTypes = string.Join(", ", entry.Select(kvp => $"{kvp.Key} {TypeFromValue(kvp.Value)}"));
+        var columnsTypes = string.Join(", ", entry.Select(kvp => $"`{kvp.Key}` {TypeFromValue(kvp.Value)}"));
         createTable.CommandText = $"CREATE TABLE IF NOT EXISTS log_entries ({columnsTypes})";
-        
+
+        await using var transaction = _connection.BeginTransaction();
         await createTable.ExecuteNonQueryAsync();
-        
+        await transaction.CommitAsync();
+
         _command = new SQLiteCommand(_connection);
-        var columns = string.Join(", ", entry.Select(kvp => kvp.Key));
+        var columns = string.Join(", ", entry.Select(kvp => $"`{kvp.Key}`"));
         var values = string.Join(", ", entry.Select(kvp => $"@{kvp.Key}"));
         _command.CommandText = $"INSERT INTO log_entries ({columns}) VALUES ({values})";
 
         _parameters = new Dictionary<string, SQLiteParameter>();
         foreach (var keyValue in entry)
-        {   
+        {
             var param = _command.CreateParameter();
             param.ParameterName = $"@{keyValue.Key}";
             _command.Parameters.Add(param);
@@ -64,13 +66,14 @@ public class Database: IAsyncDisposable
         }
     }
 
-    public async Task StoreInDatabase(List<ExpandoObject> entry)
+    public async Task StoreInDatabase(List<IDictionary<string, object>> entry)
     {
+        if (entry.Count < 1) return;
         if (_command == null)
         {
-            throw new InvalidOperationException("Command not initialized");
+            await PrepareFor(entry.First());
         }
-        
+
         await using var transaction = _connection.BeginTransaction();
         foreach (var obj in entry)
         {
@@ -78,33 +81,35 @@ public class Database: IAsyncDisposable
             {
                 _parameters[keyValue.Key].Value = keyValue.Value;
             }
+
             _command.ExecuteNonQuery();
         }
-        
+
         await transaction.CommitAsync();
     }
 
 
-    public async Task<List<ExpandoObject>> Get()
+    public async Task<List<IDictionary<string, object>>> Get()
     {
         await using var command = new SQLiteCommand(_connection);
         // read all rows from the log_entries table
         command.CommandText = "SELECT * FROM log_entries";
         await using var reader = command.ExecuteReader();
-        var result = new List<ExpandoObject>();
+        var result = new List<IDictionary<string, object>>();
         while (await reader.ReadAsync())
         {
-            var row = new ExpandoObject();
+            var row = new Dictionary<string, object>();
             for (var i = 0; i < reader.FieldCount; i++)
             {
-                ((IDictionary<string, object>)row)[reader.GetName(i)] = reader.GetValue(i);
+                row[reader.GetName(i)] = reader.GetValue(i);
             }
+
             result.Add(row);
         }
 
         return result;
     }
-    
+
     public ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);

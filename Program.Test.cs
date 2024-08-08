@@ -67,18 +67,17 @@ public class ProgramTest(ITestOutputHelper testOutputHelper)
         await using var db = new Database(dbPath, false);
         var entries = await db.Get();
         Assert.Equal(9, entries.Count);
+        var firstEntry = entries[0];
+        Assert.Equal(new DateTime(2024, 7, 24, 13, 21, 27, 169, 996), firstEntry["timestamp"]);
+        Assert.Equal(Convert.ToInt64(LogLevel.Info), firstEntry["level"]);
+        Assert.Equal("i.q.g.e.QueryProgress", firstEntry["source"]);
+        Assert.Equal("fin [id=1245, sql=`SELECT instance_name, instance_rgb, current_user`, principal=admin, cache=true, time=99001]", firstEntry["message"]);
 
-        dynamic firstEntry = entries[0];
-        Assert.Equal(new DateTime(2024, 7, 24, 13, 21, 27, 169, 996), firstEntry.timestamp);
-        Assert.Equal((int)LogLevel.Info, firstEntry.level);
-        Assert.Equal("i.q.g.e.QueryProgress", firstEntry.source);
-        Assert.Equal("fin [id=1245, sql=`SELECT instance_name, instance_rgb, current_user`, principal=admin, cache=true, time=99001]", firstEntry.message);
-
-        dynamic lastEntry = entries[^1];
-        Assert.Equal(new DateTime(2024, 7, 24, 13, 21, 27, 172, 152), lastEntry.timestamp);
-        Assert.Equal((int)LogLevel.Error, lastEntry.level);
-        Assert.Equal("i.q.c.h.p.StaticContentProcessor", lastEntry.source);
-        Assert.Equal("[157825] incoming [url=/assets/vs/loader.js]", lastEntry.message);
+        var lastEntry = entries[^1];
+        Assert.Equal(new DateTime(2024, 7, 24, 13, 21, 27, 172, 152), lastEntry["timestamp"]);
+        Assert.Equal(Convert.ToInt64(LogLevel.Error), lastEntry["level"]);
+        Assert.Equal("i.q.c.h.p.StaticContentProcessor", lastEntry["source"]);
+        Assert.Equal("[157825] incoming [url=/assets/vs/loader.js]", lastEntry["message"]);
     }
     
     [Fact]
@@ -127,16 +126,16 @@ public class ProgramTest(ITestOutputHelper testOutputHelper)
         var entries = await db.Get();
         Assert.Equal(9, entries.Count);
 
-        dynamic firstEntry = entries[0];
-        Assert.Equal(new DateTime(2024, 7, 24, 13, 21, 27, 169, 996), firstEntry.timestamp);
-        Assert.Equal((int)LogLevel.Info, firstEntry.level);
-        Assert.Equal("i.q.g.e.QueryProgress", firstEntry.source);
-        Assert.Equal("fin [id=1245, sql=`SELECT instance_name, instance_rgb, current_user`, principal=admin, cache=true, time=99001]", firstEntry.message);
+        var firstEntry = entries[0];
+        Assert.Equal(new DateTime(2024, 7, 24, 13, 21, 27, 169, 996), firstEntry["timestamp"]);
+        Assert.Equal(Convert.ToInt64(LogLevel.Info), firstEntry["level"]);
+        Assert.Equal("i.q.g.e.QueryProgress", firstEntry["source"]);
+        Assert.Equal("fin [id=1245, sql=`SELECT instance_name, instance_rgb, current_user`, principal=admin, cache=true, time=99001]", firstEntry["message"]);
 
-        dynamic lastEntry = entries[^1];
-        Assert.Equal(new DateTime(2024, 7, 24, 13, 21, 27, 172, 152), lastEntry.timestamp);
-        Assert.Equal((int)LogLevel.Error, lastEntry.level);
-        Assert.Equal("i.q.c.h.p.StaticContentProcessor", lastEntry.source);
-        Assert.Equal("[157825] incoming [url=/assets/vs/loader.js]", lastEntry.message);
+        var lastEntry = entries[^1];
+        Assert.Equal(new DateTime(2024, 7, 24, 13, 21, 27, 172, 152), lastEntry["timestamp"]);
+        Assert.Equal(Convert.ToInt64(LogLevel.Error), lastEntry["level"]);
+        Assert.Equal("i.q.c.h.p.StaticContentProcessor", lastEntry["source"]);
+        Assert.Equal("[157825] incoming [url=/assets/vs/loader.js]", lastEntry["message"]);
     }
 }
